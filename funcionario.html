@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Funcionário - GZS Manager</title>
+  <link rel="stylesheet" href="style.css"/>
+
+  <!-- Biblioteca PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="header-texts">
+      <div class="h1" id="empTitle">Funcionário</div>
+      <div class="h2" id="empSub"></div>
+    </div>
+  </header>
+
+  <main class="main" id="main">
+
+    <!-- ========================= -->
+    <!-- BLOCO PRINCIPAL (OBRIGATÓRIO PARA O SCRIPT) -->
+    <!-- ========================= -->
+    <div id="pointsCard"></div>
+
+    <!-- ========================= -->
+    <!-- VALES -->
+    <!-- ========================= -->
+    <div class="card">
+      <h4>Vales</h4>
+      <button class="btn" id="btnAddVale" type="button">Adicionar Vale</button>
+      <div id="listaVales" class="small" style="margin-top:8px"></div>
+    </div>
+
+    <!-- ========================= -->
+    <!-- DESCONTOS EXTRAS -->
+    <!-- ========================= -->
+    <div class="card">
+      <h4>Descontos Extras</h4>
+      <button class="btn danger" id="btnAddDesconto" type="button">Adicionar Desconto</button>
+      <div id="listaDescontos" class="small" style="margin-top:8px"></div>
+    </div>
+
+    <!-- ========================= -->
+    <!-- BOTÃO PDF -->
+    <!-- ========================= -->
+    <div style="margin-top:16px;text-align:right">
+      <button class="btn" id="btnPdf" type="button">Exportar PDF</button>
+    </div>
+
+  </main>
+
+  <!-- ========================= -->
+  <!-- SCRIPT PRINCIPAL DO SISTEMA -->
+  <!-- ========================= -->
+  <script src="script.js"></script>
+
+  <!-- ========================= -->
+  <!-- SCRIPT ISOLADO DO PDF -->
+  <!-- ========================= -->
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+
+      const btn = document.getElementById("btnPdf");
+      if (!btn) return;
+
+      btn.onclick = () => {
+        const el = document.getElementById("pointsCard");
+
+        // Proteção contra PDF vazio
+        if (!el || !el.innerHTML.trim()) {
+          alert("Nenhum dado para exportar");
+          return;
+        }
+
+        const nome = document.getElementById("empTitle")?.innerText || "funcionario";
+
+        const opt = {
+          margin: 10,
+          filename: 'folha-' + nome + '.pdf',
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2 },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        html2pdf().set(opt).from(el).save();
+      };
+
+    });
+  </script>
+
+</body>
+</html>
