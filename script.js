@@ -63,26 +63,35 @@ function ensureEmployeeStores(id){
 
 function isAtraso(entrada){
   if(!entrada) return false;
-  return entrada > store.config.settings.lateLimit;
+
+  const [h1,m1] = entrada.split(":").map(Number);
+  const [h2,m2] = store.config.settings.lateLimit.split(":").map(Number);
+
+  return (h1*60+m1) > (h2*60+m2);
 }
 
 /* -------------------------
 LOGIN
 ------------------------- */
 function setupLogin(){
-  const btn = el("btnLogin");
-  if(!btn) return;
+  document.addEventListener("DOMContentLoaded", ()=>{
 
-  btn.addEventListener("click", ()=>{
-    const userInput = el("user")?.value?.trim() || "";
-    const passInput = el("pass")?.value?.trim() || "";
+    const btn = el("btnLogin");
+    if(!btn) return;
 
-    if(userInput === store.config.admin.user && passInput === store.config.admin.pass){
-      localStorage.setItem("gzs_logged","1");
-      location.href="painel.html";
-    } else {
-      alert("Usuário ou senha inválidos");
-    }
+    btn.addEventListener("click", ()=>{
+      const userInput = el("user")?.value?.trim() || "";
+      const passInput = el("pass")?.value?.trim() || "";
+
+      console.log("Tentando login:", userInput, passInput); // debug
+
+      if(userInput === store.config.admin.user && passInput === store.config.admin.pass){
+        localStorage.setItem("gzs_logged","1");
+        window.location.href = "painel.html";
+      } else {
+        alert("Usuário ou senha inválidos");
+      }
+    });
 
   });
 }
@@ -245,8 +254,20 @@ function renderResumoFinanceiroPainel(){
     const vales = store.vales[id] || [];
     const descontos = store.descontos[id] || [];
 
-    totalVales += vales.reduce((s,v)=>s+v.valor,0);
-    totalDescontos += descontos.reduce((s,d)=>s+d.valor,0);
+
+totalVales += vales.reduce((s,v)=>{
+  if(p && v.data && v.data >= p.inicio && v.data <= p.fim){
+    return s + v.valor;
+  }
+  return s;
+},0);
+
+totalDescontos += descontos.reduce((s,d)=>{
+  if(p && d.data && d.data >= p.inicio && d.data <= p.fim){
+    return s + d.valor;
+  }
+  return s;
+},0);
 
   });
 
@@ -308,8 +329,20 @@ function renderDashboardGerencial(){
     const vales = store.vales[id] || [];
     const descontos = store.descontos[id] || [];
 
-    totalVales += vales.reduce((s,v)=>s+v.valor,0);
-    totalDescontos += descontos.reduce((s,d)=>s+d.valor,0);
+
+totalVales += vales.reduce((s,v)=>{
+  if(p && v.data && v.data >= p.inicio && v.data <= p.fim){
+    return s + v.valor;
+  }
+  return s;
+},0);
+
+totalDescontos += descontos.reduce((s,d)=>{
+  if(p && d.data && d.data >= p.inicio && d.data <= p.fim){
+    return s + d.valor;
+  }
+  return s;
+},0);
 
   });
 
@@ -354,16 +387,15 @@ function setupValesFuncionario(id){
   if(!btn) return;
 
   btn.onclick = ()=>{
-    const valor = parseFloat(prompt("Valor do vale (R$):"));
-    if(isNaN(valor) || valor <= 0) return alert("Valor inválido");
+  const valor = parseFloat(prompt("Valor do vale (R$):"));
+  if(isNaN(valor) || valor <= 0) return alert("Valor inválido");
 
-    const data = prompt("Data do vale (YYYY-MM-DD)")?.trim();
-    if(!data) return alert("Data inválida");
+  const data = new Date().toISOString().slice(0,10);
 
-    store.vales[id].push({ valor, data });
-    saveStore(store);
-    renderVales(id);
-  };
+  store.vales[id].push({ valor, data });
+  saveStore(store);
+  renderVales(id);
+};
 
   renderVales(id);
 }
@@ -372,12 +404,18 @@ function renderVales(id){
   const box = el("listaVales");
   if(!box) return;
 
-  if(!store.vales[id] || store.vales[id].length === 0){
-    box.innerHTML = "Nenhum vale lançado";
+  const p = store.periods[id];
+
+  const filtrados = (store.vales[id] || []).filter(v => {
+    return p && v.data && v.data >= p.inicio && v.data <= p.fim;
+  });
+
+  if(filtrados.length === 0){
+    box.innerHTML = "Nenhum vale neste período";
     return;
   }
 
-  box.innerHTML = store.vales[id].map(v => `${v.data} — ${money(v.valor)}`).join("<br>");
+  box.innerHTML = filtrados.map(v => `${v.data} — ${money(v.valor)}`).join("<br>");
 }
 
 /* -------------------------
@@ -406,12 +444,18 @@ function renderDescontos(id){
   const box = el("listaDescontos");
   if(!box) return;
 
-  if(!store.descontos[id] || store.descontos[id].length === 0){
-    box.innerHTML = "Nenhum desconto lançado";
+  const p = store.periods[id];
+
+  const filtrados = (store.descontos[id] || []).filter(d => {
+    return p && d.data && d.data >= p.inicio && d.data <= p.fim;
+  });
+
+  if(filtrados.length === 0){
+    box.innerHTML = "Nenhum desconto neste período";
     return;
   }
 
-  box.innerHTML = store.descontos[id].map(d => `${d.data} — ${money(d.valor)} (${d.motivo})`).join("<br>");
+  box.innerHTML = filtrados.map(d => `${d.data} — ${money(d.valor)} (${d.motivo})`).join("<br>");
 }
 
 /* -------------------------
@@ -507,7 +551,13 @@ function renderFuncionario(){
     if(!pAtual) return;
 
     pAtual.fechado = true;
-    saveStore(store);
+
+store.historico[id].push({
+  ...pAtual,
+  fechadoEm: new Date().toISOString()
+});
+
+saveStore(store);
 
     const fimAtual = new Date(pAtual.fim);
     fimAtual.setDate(fimAtual.getDate() + 1);
@@ -532,6 +582,8 @@ function renderFuncionario(){
 
     alert(`Período fechado com sucesso! Novo período de ${inicioNovo} até ${fimNovo} criado.`);
     renderTabela();
+renderVales(id);
+renderDescontos(id);
   });
 
   if(store.periods[id]) renderTabela();
@@ -628,8 +680,19 @@ const descontoFaltas = totalFalta * (
       }
     });
 
-    const totalVales = (store.vales[id]||[]).reduce((s,v)=>s+v.valor,0);
-    const totalDescontos = (store.descontos[id]||[]).reduce((s,d)=>s+d.valor,0);
+    const totalVales = (store.vales[id] || []).reduce((s, v) => {
+  if(v.data && v.data >= p.inicio && v.data <= p.fim){
+    return s + v.valor;
+  }
+  return s;
+}, 0);
+
+const totalDescontos = (store.descontos[id] || []).reduce((s, d) => {
+  if(d.data && d.data >= p.inicio && d.data <= p.fim){
+    return s + d.valor;
+  }
+  return s;
+}, 0);
 
     const descontoAtrasos = totalAtrasos * store.config.settings.latePenalty;
 
