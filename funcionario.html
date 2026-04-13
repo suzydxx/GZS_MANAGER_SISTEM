@@ -55,7 +55,7 @@
   <!-- ========================= -->
   <!-- SCRIPT PRINCIPAL DO SISTEMA -->
   <!-- ========================= -->
-  <script src="script.js"></script>
+  <script defer src="script.js"></script>
 
   <!-- ========================= -->
   <!-- SCRIPT ISOLADO DO PDF -->
@@ -67,7 +67,7 @@
       if (!btn) return;
 
       btn.onclick = () => {
-        const el = document.getElementById("pointsCard");
+        const el = document.getElementById("main");
 
         // Proteção contra PDF vazio
         if (!el || !el.innerHTML.trim()) {
