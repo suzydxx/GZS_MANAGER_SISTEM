@@ -193,15 +193,15 @@
           Acompanhe rapidamente o status de funcionários, ponto e financeiro.
         </p>
 
-        <div id="overview">
-  <div id="resumoFinanceiroPainel"></div>
-</div>
+        <div id="overview"></div>
+
+<div id="resumoFinanceiroPainel" style="margin-top:20px;"></div>
 
     </main>
 
   </main>
 
-  <script src="script.js"></script>
+  <script defer src="script.js"></script>
 
   <!-- CONTADOR AUTOMÁTICO DE FUNCIONÁRIOS -->
   <script>
@@ -214,7 +214,8 @@
         const raw = localStorage.getItem("gzs_manager_v3");
         if(!raw) return;
         const store = JSON.parse(raw);
-        const all = store.employees.length;
+        const all = (store.employees || []).length;
+const active = (store.employees || []).filter(e=>e.active).length;
         const active = store.employees.filter(e=>e.active).length;
         const inactive = all - active;
         if(counterEl) counterEl.innerText = `Total: ${all} | Ativos: ${active} | Inativos: ${inactive}`;
@@ -254,4 +255,3 @@
   </script>
 
 </body>
-</html>
