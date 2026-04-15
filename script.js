@@ -7,7 +7,7 @@ COM FILTROS DE FUNCIONÁRIOS ATIVOS/INATIVOS
 (function(){
 
 const LS_KEY = 'gzs_manager_v3';
-
+1
 /* -------------------------
 UTILS
 ------------------------- */
@@ -17,10 +17,6 @@ function loadStore(){
     if(raw) return JSON.parse(raw);
   } catch{}
   return {};
-}
-
-function saveStore(s){
-  localStorage.setItem(LS_KEY, JSON.stringify(s));
 }
 
 function el(id){ return document.getElementById(id); }
@@ -37,7 +33,8 @@ BLINDAGEM GLOBAL
 store.config ||= {};
 store.config.admin ||= { user:"gelozonasul", pass:"1234" };
 store.config.settings ||= {
-  weeklySalary:350,
+  weeklySalary:400,
+  biweeklySalary:700,
   lateLimit:"08:21",
   latePenalty:10,
   mealValue:20,
@@ -74,34 +71,76 @@ function isAtraso(entrada){
 LOGIN
 ------------------------- */
 function setupLogin(){
-  document.addEventListener("DOMContentLoaded", ()=>{
+  const btn = el("btnLogin");
+  if(!btn) return;
 
-    const btn = el("btnLogin");
-    if(!btn) return;
+  btn.addEventListener("click", ()=>{
+    const userInput = el("user")?.value?.trim();
+const passInput = el("pass")?.value?.trim();
 
-    btn.addEventListener("click", ()=>{
-      const userInput = el("user")?.value?.trim() || "";
-      const passInput = el("pass")?.value?.trim() || "";
+console.log("Digitado:", userInput, passInput);
+console.log("Correto:", store.config.admin);
 
-      console.log("Tentando login:", userInput, passInput); // debug
+if(!userInput || !passInput){
+  alert("Preencha usuário e senha");
+  return;
+}
 
-      if(userInput === store.config.admin.user && passInput === store.config.admin.pass){
-        localStorage.setItem("gzs_logged","1");
-        window.location.href = "painel.html";
-      } else {
-        alert("Usuário ou senha inválidos");
-      }
-    });
+    console.log("Tentando login:", userInput, passInput);
 
+    if(userInput === store.config.admin.user && passInput === store.config.admin.pass){
+      const token = btoa(userInput + ":" + passInput);
+      localStorage.setItem("gzs_logged", JSON.stringify({
+  token,
+  user: userInput,
+  time: Date.now()
+}));
+      window.location.href = "painel.html";
+    } else {
+      alert("Usuário ou senha inválidos");
+    }
   });
 }
 
 function protect(){
+  const raw = localStorage.getItem("gzs_logged");
   const p = location.pathname.split("/").pop();
-  if(["painel.html","funcionario.html","configuracoes.html"].includes(p) &&
-     localStorage.getItem("gzs_logged")!=="1"){
-    location.href="index.html";
+
+  const paginasProtegidas = [
+    "painel.html",
+    "funcionario.html",
+    "configuracoes.html"
+  ];
+
+  if(!paginasProtegidas.includes(p)) return;
+
+  if(!raw){
+    location.href = "index.html";
+    return;
   }
+
+  try{
+    const data = JSON.parse(raw);
+
+    if(!data.token){
+      throw new Error("Token inválido");
+    }
+
+  }catch{
+    localStorage.removeItem("gzs_logged");
+    location.href = "index.html";
+  }
+}
+function saveStore(s){
+
+  try{
+    const backup = localStorage.getItem(LS_KEY);
+    if(backup){
+      localStorage.setItem(LS_KEY + "_backup", backup);
+    }
+  }catch{}
+
+  localStorage.setItem(LS_KEY, JSON.stringify(s));
 }
 
 /* -------------------------
@@ -141,6 +180,17 @@ function renderEmployeeList(filter="todos"){
     if(filter === "inativos") return !emp.active;
     return true;
   });
+
+function renderEmployeeCounter(){
+  const counterEl = el("empCounter");
+  if(!counterEl) return;
+
+  const all = store.employees.length;
+  const active = store.employees.filter(e=>e.active).length;
+  const inactive = all - active;
+
+  counterEl.innerText = `Total: ${all} | Ativos: ${active} | Inativos: ${inactive}`;
+}
 
   filteredEmployees.forEach(emp=>{
     const d = document.createElement("div");
@@ -198,7 +248,9 @@ Todos os dados serão apagados:
 };
 
     list.appendChild(d);
-  });
+});
+
+renderEmployeeCounter();  
 }
 
 /* -------------------------
@@ -379,23 +431,41 @@ totalDescontos += descontos.reduce((s,d)=>{
 
 }
 
-/* -------------------------
-VALES
-------------------------- */
 function setupValesFuncionario(id){
   const btn = el("btnAddVale");
   if(!btn) return;
 
   btn.onclick = ()=>{
-  const valor = parseFloat(prompt("Valor do vale (R$):"));
-  if(isNaN(valor) || valor <= 0) return alert("Valor inválido");
+    const valor = parseFloat(prompt("Valor do vale (R$):"));
+    if(isNaN(valor) || valor <= 0) return alert("Valor inválido");
 
-  const data = new Date().toISOString().slice(0,10);
+    const data = prompt("Data do vale (YYYY-MM-DD)")?.trim();
+    if(!data) return alert("Data inválida");
 
-  store.vales[id].push({ valor, data });
-  saveStore(store);
-  renderVales(id);
-};
+    const p = store.periods[id];
+
+    if(!p){
+      alert("Defina um período antes de lançar vales.");
+      return;
+    }
+
+    if(data < p.inicio || data > p.fim){
+      const confirmar = confirm(
+`⚠️ Data fora do período atual!
+
+Período: ${p.inicio} até ${p.fim}
+
+Deseja lançar mesmo assim?`
+      );
+
+      if(!confirmar) return;
+    }
+
+    store.vales[id].push({ valor, data });
+    saveStore(store);
+
+    renderVales(id);
+  };
 
   renderVales(id);
 }
@@ -406,16 +476,62 @@ function renderVales(id){
 
   const p = store.periods[id];
 
-  const filtrados = (store.vales[id] || []).filter(v => {
-    return p && v.data && v.data >= p.inicio && v.data <= p.fim;
-  });
+  const vales = store.vales[id] || [];
+
+  const filtrados = vales
+    .map((v, i) => ({ ...v, index: i }))
+    .filter(v => p && v.data && v.data >= p.inicio && v.data <= p.fim);
 
   if(filtrados.length === 0){
     box.innerHTML = "Nenhum vale neste período";
     return;
   }
 
-  box.innerHTML = filtrados.map(v => `${v.data} — ${money(v.valor)}`).join("<br>");
+  box.innerHTML = filtrados.map(v => `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;padding:6px;border-bottom:1px solid #eee;">
+      
+      <span>${v.data} — ${money(v.valor)}</span>
+      
+      <div>
+        <button class="btn btnEditarVale" data-i="${v.index}">✏️</button>
+        <button class="btn danger btnExcluirVale" data-i="${v.index}">🗑</button>
+      </div>
+
+    </div>
+  `).join("");
+
+  box.querySelectorAll(".btnEditarVale").forEach(btn=>{
+    btn.onclick = ()=>{
+      const i = btn.dataset.i;
+      const vale = store.vales[id][i];
+
+      const novoValor = parseFloat(prompt("Novo valor:", vale.valor));
+      if(isNaN(novoValor) || novoValor <= 0) return alert("Valor inválido");
+
+      const novaData = prompt("Nova data (YYYY-MM-DD):", vale.data)?.trim();
+      if(!novaData) return alert("Data inválida");
+
+      vale.valor = novoValor;
+      vale.data = novaData;
+
+      saveStore(store);
+      renderVales(id);
+    };
+  });
+
+  box.querySelectorAll(".btnExcluirVale").forEach(btn=>{
+    btn.onclick = ()=>{
+      const i = btn.dataset.i;
+
+      const confirmar = confirm("Excluir este vale?");
+      if(!confirmar) return;
+
+      store.vales[id].splice(i, 1);
+
+      saveStore(store);
+      renderVales(id);
+    };
+  });
 }
 
 /* -------------------------
@@ -446,16 +562,68 @@ function renderDescontos(id){
 
   const p = store.periods[id];
 
-  const filtrados = (store.descontos[id] || []).filter(d => {
-    return p && d.data && d.data >= p.inicio && d.data <= p.fim;
-  });
+  const descontos = store.descontos[id] || [];
+
+  const filtrados = descontos
+    .map((d, i) => ({ ...d, index: i }))
+    .filter(d => p && d.data && d.data >= p.inicio && d.data <= p.fim);
 
   if(filtrados.length === 0){
     box.innerHTML = "Nenhum desconto neste período";
     return;
   }
 
-  box.innerHTML = filtrados.map(d => `${d.data} — ${money(d.valor)} (${d.motivo})`).join("<br>");
+  box.innerHTML = filtrados.map(d => `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;padding:6px;border-bottom:1px solid #eee;">
+      
+      <span>${d.data} — ${money(d.valor)} (${d.motivo})</span>
+      
+      <div>
+        <button class="btn btnEditarDesconto" data-i="${d.index}">✏️</button>
+        <button class="btn danger btnExcluirDesconto" data-i="${d.index}">🗑</button>
+      </div>
+
+    </div>
+  `).join("");
+
+  // ✏️ EDITAR DESCONTO
+  box.querySelectorAll(".btnEditarDesconto").forEach(btn=>{
+    btn.onclick = ()=>{
+      const i = btn.dataset.i;
+      const desconto = store.descontos[id][i];
+
+      const novoValor = parseFloat(prompt("Novo valor:", desconto.valor));
+      if(isNaN(novoValor) || novoValor <= 0) return alert("Valor inválido");
+
+      const novoMotivo = prompt("Novo motivo:", desconto.motivo)?.trim();
+      if(!novoMotivo) return alert("Motivo inválido");
+
+      const novaData = prompt("Nova data (YYYY-MM-DD):", desconto.data)?.trim();
+      if(!novaData) return alert("Data inválida");
+
+      desconto.valor = novoValor;
+      desconto.motivo = novoMotivo;
+      desconto.data = novaData;
+
+      saveStore(store);
+      renderDescontos(id);
+    };
+  });
+
+  // 🗑 EXCLUIR DESCONTO
+  box.querySelectorAll(".btnExcluirDesconto").forEach(btn=>{
+    btn.onclick = ()=>{
+      const i = btn.dataset.i;
+
+      const confirmar = confirm("Excluir este desconto?");
+      if(!confirmar) return;
+
+      store.descontos[id].splice(i, 1);
+
+      saveStore(store);
+      renderDescontos(id);
+    };
+  });
 }
 
 /* -------------------------
@@ -467,6 +635,9 @@ function renderFuncionario(){
   if(!emp) return location.href="painel.html";
 
   ensureEmployeeStores(id);
+
+  let visualizandoHistorico = false;
+let historicoSelecionado = null;
 
   const card = el("pointsCard");
   if(!card) return;
@@ -505,6 +676,12 @@ function renderFuncionario(){
       <div id="periodoAtivo" class="small"></div>
       <div id="tabelaPeriodo"></div>
       <div id="financeiroPeriodo"></div>
+
+<button class="btn" id="btnExportarPDF" style="margin-top:10px;">
+  📄 Exportar PDF
+</button>
+
+<div id="historicoPeriodos"></div>
     </div>
   `;
 
@@ -548,14 +725,18 @@ function renderFuncionario(){
 
   el("fecharPeriodo")?.addEventListener("click", ()=>{
     const pAtual = store.periods[id];
-    if(!pAtual) return;
+if(!pAtual) return;
 
-    pAtual.fechado = true;
+ensureEmployeeStores(id);
 
-store.historico[id].push({
-  ...pAtual,
-  fechadoEm: new Date().toISOString()
-});
+pAtual.fechado = true;
+
+store.historico[id].push(
+  JSON.parse(JSON.stringify({
+    ...pAtual,
+    fechadoEm: new Date().toISOString()
+  }))
+);
 
 saveStore(store);
 
@@ -581,16 +762,208 @@ saveStore(store);
     saveStore(store);
 
     alert(`Período fechado com sucesso! Novo período de ${inicioNovo} até ${fimNovo} criado.`);
-    renderTabela();
+renderTabela();
 renderVales(id);
 renderDescontos(id);
+renderHistorico(id);
   });
 
   if(store.periods[id]) renderTabela();
 
-  function renderTabela(){
-    const p = store.periods[id];
-    if(!p) return;
+renderHistorico(id);
+
+el("btnExportarPDF")?.addEventListener("click", ()=>{
+  exportarPDF(id);
+});
+
+function renderHistorico(id){
+  const box = el("historicoPeriodos");
+  if(!box) return;
+
+  const historico = store.historico[id] || [];
+
+  if(historico.length === 0){
+    box.innerHTML = `
+      <div class="card">
+        <h4>Histórico de Períodos</h4>
+        <div class="small">Nenhum período fechado ainda</div>
+      </div>
+    `;
+    return;
+  }
+
+  box.innerHTML = `
+    <div class="card">
+      <h4>Histórico de Períodos</h4>
+
+      ${historico.map((h, index) => `
+  <div 
+    class="itemHistorico" 
+    data-i="${index}"
+    style="margin-bottom:8px;padding:8px;border-bottom:1px solid #eee;cursor:pointer;">
+    
+    <div><strong>${h.inicio} → ${h.fim}</strong></div>
+    <div class="small">Fechado em: ${new Date(h.fechadoEm).toLocaleDateString()}</div>
+
+  </div>
+`).join("")}
+
+    </div>
+  `;
+
+  // 🔥 NOVO BLOCO (ESSA É A PARTE QUE VOCÊ ADICIONA)
+  box.querySelectorAll(".itemHistorico").forEach(item=>{
+    item.onclick = ()=>{
+      const index = item.dataset.i;
+      abrirHistoricoPeriodo(id, index);
+    };
+  });
+
+}
+
+function abrirHistoricoPeriodo(id, index){
+  const h = store.historico[id][index];
+  if(!h) return;
+
+  visualizandoHistorico = true;
+historicoSelecionado = h;
+
+  const box = el("tabelaPeriodo");
+  el("defPeriodo").disabled = true;
+el("fecharPeriodo").disabled = true;
+  const financeiro = el("financeiroPeriodo");
+
+  // 🔒 trava visual de período
+  el("periodoAtivo").innerText =
+    `Histórico: ${h.inicio} até ${h.fim} (FECHADO)`;
+
+  let totalFalta = 0;
+  let totalAtrasos = 0;
+
+  let html = `<table class="table">
+  <tr>
+    <th>Data</th><th>Status</th><th>Folga</th><th>Entrada</th><th>Saída</th>
+  </tr>`;
+
+  Object.entries(h.dias).forEach(([data,info])=>{
+
+    if(info.status==="Falta") totalFalta++;
+    if(info.status==="Presente" && isAtraso(info.entrada)) totalAtrasos++;
+
+    html += `<tr>
+      <td>${data}</td>
+      <td>${info.status}</td>
+      <td>${info.folgaVenda}</td>
+      <td>${info.entrada || "-"}</td>
+      <td>${info.saida || "-"}</td>
+    </tr>`;
+  });
+
+  html += "</table>";
+  box.innerHTML = html;
+
+  // 💰 cálculo igual ao período normal (congelado)
+  const emp = store.employees.find(e=>e.id===id);
+
+  let salarioPeriodo = emp.payType==="Semanal"
+    ? store.config.settings.weeklySalary
+    : store.config.settings.biweeklySalary;
+
+  let diasPeriodo = emp.payType==="Semanal"? 7 : 15;
+  const valorDia = salarioPeriodo / diasPeriodo;
+
+  const valorFaltaConfig = store.config.settings.faltaValue;
+
+  const descontoFaltas = totalFalta * (
+    valorFaltaConfig !== null ? valorFaltaConfig : valorDia
+  );
+
+  const descontoAtrasos = totalAtrasos * store.config.settings.latePenalty;
+
+  const totalVales = (store.vales[id] || []).reduce((s,v)=>{
+    if(v.data >= h.inicio && v.data <= h.fim){
+      return s + v.valor;
+    }
+    return s;
+  },0);
+
+  const totalDescontos = (store.descontos[id] || []).reduce((s,d)=>{
+    if(d.data >= h.inicio && d.data <= h.fim){
+      return s + d.valor;
+    }
+    return s;
+  },0);
+
+  let totalAlimentacao = 0;
+  Object.values(h.dias).forEach(info=>{
+    if(info.status==="Presente" && info.entrada){
+      totalAlimentacao += store.config.settings.mealValue;
+    }
+  });
+
+  let totalFolga = 0;
+  Object.values(h.dias).forEach(info=>{
+    if(info.folgaVenda==="Acumulada"){
+      totalFolga += store.config.settings.dayOffValue;
+    }
+  });
+
+  const salarioFinal =
+  salarioPeriodo
+  - descontoFaltas
+  - descontoAtrasos
+  - totalVales
+  - totalDescontos
+  + totalAlimentacao
+  + totalFolga;
+
+financeiro.innerHTML = `
+  <div class="card">
+
+    <!-- 🔥 BOTÃO NOVO -->
+    <button class="btn" id="voltarPeriodo" style="margin-bottom:10px;">
+      ⬅ Voltar ao período atual
+    </button>
+
+    <h4>Resumo do Período (Histórico)</h4>
+
+    <div>Salário: ${money(salarioPeriodo)}</div>
+    <div>Faltas: - ${money(descontoFaltas)}</div>
+    <div>Atrasos: - ${money(descontoAtrasos)}</div>
+    <div>Vales: - ${money(totalVales)}</div>
+    <div>Descontos: - ${money(totalDescontos)}</div>
+    <div>Alimentação: + ${money(totalAlimentacao)}</div>
+    <div>Folgas: + ${money(totalFolga)}</div>
+
+    <hr>
+    <strong>Total: ${money(salarioFinal)}</strong>
+  </div>
+`;
+
+el("voltarPeriodo").onclick = ()=>{
+  visualizandoHistorico = false;
+  historicoSelecionado = null;
+
+  renderTabela();
+renderVales(id);
+renderDescontos(id);
+
+el("defPeriodo").disabled = false;
+el("fecharPeriodo").disabled = false;
+
+  const pAtual = store.periods[id];
+
+el("periodoAtivo").innerText =
+  `Período: ${pAtual.inicio} até ${pAtual.fim} ${pAtual.fechado ? "(FECHADO)" : ""}`;
+};
+}
+
+function renderTabela(){
+
+  if(visualizandoHistorico) return;
+
+  const p = historicoSelecionado || store.periods[id];
+  if(!p) return;
 
     el("periodoAtivo") && (el("periodoAtivo").innerText =
       `Período: ${p.inicio} até ${p.fim} ${p.fechado ? "(FECHADO)" : ""}`
@@ -647,8 +1020,8 @@ renderDescontos(id);
     });
 
     let salarioPeriodo = emp.payType==="Semanal"
-      ? store.config.settings.weeklySalary
-      : store.config.settings.weeklySalary*2;
+  ? store.config.settings.weeklySalary
+  : store.config.settings.biweeklySalary;
 
     let diasPeriodo = emp.payType==="Semanal"? 7 : 15;
     const valorDia = salarioPeriodo / diasPeriodo;
@@ -751,7 +1124,48 @@ const totalDescontos = (store.descontos[id] || []).reduce((s, d) => {
       </div>
     `);
   }
+}
 
+function exportarPDF(id){
+
+  const emp = store.employees.find(e=>e.id===id);
+  const p = historicoSelecionado || store.periods[id];
+
+  if(!p){
+    alert("Nenhum período ativo para exportar");
+    return;
+  }
+
+  const tabela = el("tabelaPeriodo")?.innerHTML || "";
+  const financeiro = el("financeiroPeriodo")?.innerHTML || "";
+
+  const conteudo = `
+    <div style="font-family:Arial;padding:20px;">
+      <h2>${store.config.empresa}</h2>
+      <h3>Funcionário: ${emp.name}</h3>
+      <p>Período: ${p.inicio} até ${p.fim}</p>
+
+      <hr>
+
+      <h4>Registro de Dias</h4>
+      ${tabela}
+
+      <hr>
+
+      <h4>Resumo Financeiro</h4>
+      ${financeiro}
+    </div>
+  `;
+
+  const opt = {
+    margin:       0.5,
+    filename:     `${emp.name}_${p.inicio}_${p.fim}.pdf`,
+    image:        { type: 'jpeg', quality: 0.98 },
+    html2canvas:  { scale: 2 },
+    jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+  };
+
+  html2pdf().from(conteudo).set(opt).save();
 }
 
 function init(){
@@ -766,6 +1180,9 @@ function init(){
   setupAddEmployee();
   renderResumoFinanceiroPainel();
   renderDashboardGerencial();
+
+  renderEmployeeCounter();
+  applyEmpresaConfig();
 }
 
   if(p==="funcionario.html"){
