@@ -19,6 +19,15 @@
       <h3>Configurações</h3>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+        <div>
+  <label>Salário Semanal (R$)</label>
+  <input id="cWeekly" class="input" type="number" />
+</div>
+
+<div>
+  <label>Salário Quinzenal (R$)</label>
+  <input id="cBiweekly" class="input" type="number" />
+</div>
         <div><label>Nome da empresa</label><input id="cEmpresa" class="input" /></div>
         <div><label>Email</label><input id="cEmail" class="input" /></div>
         <div><label>Usuário Admin</label><input id="cUser" class="input" /></div>
@@ -67,33 +76,43 @@
 
       // carregar valores ao abrir
       document.getElementById("cEmpresa").value   = store.config.empresa || "";
-      document.getElementById("cUser").value      = store.config.admin?.user || "";
-      document.getElementById("cPass").value      = store.config.admin?.pass || "";
-      document.getElementById("cSell").value      = store.config.settings?.dayOffValue || "";
-      document.getElementById("cFood").value      = store.config.settings?.mealValue || "";
-      document.getElementById("cLate").value      = store.config.settings?.latePenalty || "";
-      document.getElementById("cFalta").value     = store.config.settings?.faltaValue ?? "";
-      document.getElementById("cLateLimit").value = store.config.settings?.lateLimit || "";
+document.getElementById("cUser").value      = store.config.admin?.user || "";
+document.getElementById("cPass").value      = store.config.admin?.pass || "";
+document.getElementById("cSell").value      = store.config.settings?.dayOffValue || "";
+document.getElementById("cFood").value      = store.config.settings?.mealValue || "";
+document.getElementById("cLate").value      = store.config.settings?.latePenalty || "";
+document.getElementById("cFalta").value     = store.config.settings?.faltaValue ?? "";
+document.getElementById("cLateLimit").value = store.config.settings?.lateLimit || "";
+
+document.getElementById("cWeekly").value   = store.config.settings?.weeklySalary || "";
+document.getElementById("cBiweekly").value = store.config.settings?.biweeklySalary || "";
 
       // salvar configurações
       document.getElementById("saveCfg").onclick = () => {
         store.config.empresa = document.getElementById("cEmpresa").value;
-        store.config.admin.user = document.getElementById("cUser").value;
-        store.config.admin.pass = document.getElementById("cPass").value;
+store.config.admin.user = document.getElementById("cUser").value;
+store.config.admin.pass = document.getElementById("cPass").value;
 
-        store.config.settings.dayOffValue = Number(document.getElementById("cSell").value || 0);
-        store.config.settings.mealValue   = Number(document.getElementById("cFood").value || 0);
-        store.config.settings.latePenalty = Number(document.getElementById("cLate").value || 0);
+store.config.settings.dayOffValue = Number(document.getElementById("cSell").value || 0);
+store.config.settings.mealValue   = Number(document.getElementById("cFood").value || 0);
+store.config.settings.latePenalty = Number(document.getElementById("cLate").value || 0);
 
-        store.config.settings.faltaValue =
-          document.getElementById("cFalta").value === ""
-            ? null
-            : Number(document.getElementById("cFalta").value);
+store.config.settings.faltaValue =
+  document.getElementById("cFalta").value === ""
+    ? null
+    : Number(document.getElementById("cFalta").value);
 
-        store.config.settings.lateLimit   = document.getElementById("cLateLimit").value;
+store.config.settings.lateLimit   = document.getElementById("cLateLimit").value;
 
-        saveStore(store);
-        alert("Configurações salvas com sucesso");
+// 🔥 NOVO (COLOCA EXATAMENTE AQUI)
+store.config.settings.weeklySalary =
+  Number(document.getElementById("cWeekly").value || 0);
+
+store.config.settings.biweeklySalary =
+  Number(document.getElementById("cBiweekly").value || 0);
+
+saveStore(store);
+alert("Configurações salvas com sucesso");
       };
     })();
   </script>
