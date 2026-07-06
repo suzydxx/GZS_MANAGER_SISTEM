@@ -1174,7 +1174,7 @@ function init(){
 
   const p = location.pathname.split("/").pop();
 
- if(p==="painel.html"){
+  if(p==="painel.html"){
   renderEmployeeList();
   setupEmployeeFilter();
   setupAddEmployee();
@@ -1182,7 +1182,6 @@ function init(){
   renderDashboardGerencial();
 
   renderEmployeeCounter();
-  applyEmpresaConfig();
 }
 
   if(p==="funcionario.html"){
